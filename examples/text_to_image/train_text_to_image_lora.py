@@ -458,7 +458,9 @@ def main():
     # => 32 layers
 
     # Set correct lora layers
+    #LoRA 注意力处理器字典
     lora_attn_procs = {}
+    # 遍历 U-Net 的所有注意力处理器
     for name in unet.attn_processors.keys():
         cross_attention_dim = None if name.endswith("attn1.processor") else unet.config.cross_attention_dim
         if name.startswith("mid_block"):
@@ -470,6 +472,7 @@ def main():
             block_id = int(name[len("down_blocks.")])
             hidden_size = unet.config.block_out_channels[block_id]
 
+        #创建 LoRA 注意力处理器
         lora_attn_procs[name] = LoRAAttnProcessor(
             hidden_size=hidden_size,
             cross_attention_dim=cross_attention_dim,
