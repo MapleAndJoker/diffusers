@@ -72,6 +72,7 @@ class LoRALinearLayer(nn.Module):
         super().__init__()
 
         self.down = nn.Linear(in_features, rank, bias=False, device=device, dtype=dtype)
+        #在这加M层
         self.up = nn.Linear(rank, out_features, bias=False, device=device, dtype=dtype)
         # This value has the same meaning as the `--network_alpha` option in the kohya-ss trainer script.
         # See https://github.com/darkstorm2150/sd-scripts/blob/main/docs/train_network_README-en.md#execute-learning
@@ -82,14 +83,18 @@ class LoRALinearLayer(nn.Module):
 
         nn.init.normal_(self.down.weight, std=1 / rank)
         nn.init.zeros_(self.up.weight)
+        #M层初始化
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        #数据类型保持一致
         orig_dtype = hidden_states.dtype
         dtype = self.down.weight.dtype
 
         down_hidden_states = self.down(hidden_states.to(dtype))
+        #加入M层
         up_hidden_states = self.up(down_hidden_states)
 
+        #up_hidden_states 乘以缩放因子network_alpha /rank
         if self.network_alpha is not None:
             up_hidden_states *= self.network_alpha / self.rank
 
@@ -134,6 +139,7 @@ class LoRAConv2dLayer(nn.Module):
         self.down = nn.Conv2d(in_features, rank, kernel_size=kernel_size, stride=stride, padding=padding, bias=False)
         # according to the official kohya_ss trainer kernel_size are always fixed for the up layer
         # # see: https://github.com/bmaltais/kohya_ss/blob/2accb1305979ba62f5077a23aabac23b4c37e935/networks/lora_diffusers.py#L129
+        #加M层
         self.up = nn.Conv2d(rank, out_features, kernel_size=(1, 1), stride=(1, 1), bias=False)
 
         # This value has the same meaning as the `--network_alpha` option in the kohya-ss trainer script.

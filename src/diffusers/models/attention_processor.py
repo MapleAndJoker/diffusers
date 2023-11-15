@@ -1737,6 +1737,10 @@ class LoRAAttnProcessor(nn.Module):
         out_hidden_size = out_hidden_size if out_hidden_size is not None else hidden_size
 
         self.to_q_lora = LoRALinearLayer(q_hidden_size, q_hidden_size, q_rank, network_alpha)
+        '''
+        如果 cross_attention_dim 不是 None（即它有一个有效的值），则使用 cross_attention_dim。
+        如果 cross_attention_dim 是 None，则使用 hidden_size 作为备选值。
+        '''
         self.to_k_lora = LoRALinearLayer(cross_attention_dim or hidden_size, hidden_size, rank, network_alpha)
         self.to_v_lora = LoRALinearLayer(cross_attention_dim or v_hidden_size, v_hidden_size, v_rank, network_alpha)
         self.to_out_lora = LoRALinearLayer(out_hidden_size, out_hidden_size, out_rank, network_alpha)
