@@ -190,6 +190,13 @@ class LoRACompatibleConv(nn.Conv2d):
 
         fusion = torch.mm(w_up.flatten(start_dim=1), w_down.flatten(start_dim=1))
         fusion = fusion.reshape((w_orig.shape))
+        '''
+        在卷积层中，权重通常是多维的
+        对于 nn.Conv2d，权重的形状是 [输出通道数, 输入通道数, 高度, 宽度]
+        为了进行矩阵乘法，需要将这些多维权重转换为二维矩阵。这是因为矩阵乘法是定义在二维矩阵上的操作。
+        flatten(start_dim=1) 将每个权重张量从其第二个维度开始展平，转换为二维矩阵。
+        这样做保留了权重的“输出通道”维度，而将其他维度（输入通道、高度、宽度）展平。
+        '''
         fused_weight = w_orig + (lora_scale * fusion)
 
         if safe_fusing and torch.isnan(fused_weight).any().item():
@@ -266,7 +273,17 @@ class LoRACompatibleLinear(nn.Linear):
         if self.lora_layer.network_alpha is not None:
             w_up = w_up * self.lora_layer.network_alpha / self.lora_layer.rank
 
+        #  LoRA 权重融合
+        #加入M矩阵要改
         fused_weight = w_orig + (lora_scale * torch.bmm(w_up[None, :], w_down[None, :])[0])
+        '''
+        批量矩阵乘法（torch.bmm）
+        w_up[None, :] 和 w_down[None, :] 在 w_up 和 w_down 前添加一个新的批次维度来准备的
+        即使它们是单个矩阵，也能被 torch.bmm 接受作为批次矩阵乘法的输入。
+        torch.bmm 返回的结果是一个批次的矩阵乘积，即使只有一个乘法操作。
+        因此，结果将是一个形状为 [1, x, y] 的张量
+        我们使用 [0] 来提取这个批次中的第一个元素，这将是一个形状为 [x, y] 的二维张量。
+        '''
 
         if safe_fusing and torch.isnan(fused_weight).any().item():
             raise ValueError(
@@ -288,7 +305,8 @@ class LoRACompatibleLinear(nn.Linear):
     def _unfuse_lora(self):
         if not (getattr(self, "w_up", None) is not None and getattr(self, "w_down", None) is not None):
             return
-
+        # 只有在 LoRA 权重实际存在的情况下，才会尝试进行解融合操作
+        # M层在此处检查
         fused_weight = self.weight.data
         dtype, device = fused_weight.dtype, fused_weight.device
 
@@ -296,8 +314,10 @@ class LoRACompatibleLinear(nn.Linear):
         w_down = self.w_down.to(device).float()
 
         unfused_weight = fused_weight.float() - (self._lora_scale * torch.bmm(w_up[None, :], w_down[None, :])[0])
+        # 从融合后的权重中减去 U 和 D 权重乘积的影响
+        #再减去M层
         self.weight.data = unfused_weight.to(device=device, dtype=dtype)
-
+        
         self.w_up = None
         self.w_down = None
 
@@ -307,4 +327,5 @@ class LoRACompatibleLinear(nn.Linear):
             return out
         else:
             out = super().forward(hidden_states) + (scale * self.lora_layer(hidden_states))
+            #传到LoRALinearLayer的forward方法中
             return out
