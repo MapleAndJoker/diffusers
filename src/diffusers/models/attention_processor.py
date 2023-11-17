@@ -1760,8 +1760,9 @@ class LoRAAttnProcessor(nn.Module):
         attn.to_k.lora_layer = self.to_k_lora.to(hidden_states.device)
         attn.to_v.lora_layer = self.to_v_lora.to(hidden_states.device)
         attn.to_out[0].lora_layer = self.to_out_lora.to(hidden_states.device)
-
+        #在很多注意力机制的实现中，to_out 是一个包含多个子层的列表（在某些实现中可能只有一个层），用于处理注意力机制的输出。
         attn._modules.pop("processor")
+        #移除现有的 processor
         attn.processor = AttnProcessor()
         return attn.processor(attn, hidden_states, *args, **kwargs)
 

@@ -100,6 +100,55 @@ class LoRALinearLayer(nn.Module):
 
         return up_hidden_states.to(orig_dtype)
 
+class TriLoRALinearLayer(nn.Module):
+
+    def __init__(
+        self,
+        in_features: int,
+        out_features: int,
+        mid_rank_in: int = 4,
+        mid_rank_out: int = 4,
+ #       rank: int = 4,
+        network_alpha: Optional[float] = None,
+        device: Optional[Union[torch.device, str]] = None,
+        dtype: Optional[torch.dtype] = None,
+    ):
+        super().__init__()
+
+        self.down = nn.Linear(in_features, mid_rank_in, bias=False, device=device, dtype=dtype)
+        #在这加M层
+        self.middle = nn.Linear(mid_rank_in, mid_rank_out, bias=False, device=device, dtype=dtype)
+        self.up = nn.Linear(mid_rank_out, out_features, bias=False, device=device, dtype=dtype)
+
+        self.network_alpha = network_alpha
+        self.mid_rank_in = mid_rank_in
+        self.mid_rank_out = mid_rank_out
+        self.out_features = out_features
+        self.in_features = in_features
+
+        nn.init.normal_(self.down.weight, std=1 / mid_rank_in)
+        nn.init.normal_(self.middle.weight, std=1 / mid_rank_out)
+        nn.init.zeros_(self.up.weight)
+        #M层初始化
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        #数据类型保持一致
+        orig_dtype = hidden_states.dtype
+        dtype = self.down.weight.dtype
+
+        down_hidden_states = self.down(hidden_states.to(dtype))
+        middle_hidden_states = self.middle(down_hidden_states)
+        #加入M层
+        up_hidden_states = self.up(middle_hidden_states)
+
+        average_rank = (self.mid_rank_in + self.mid_rank_out) / 2
+
+        #up_hidden_states 乘以缩放因子
+        if self.network_alpha is not None:
+            up_hidden_states *= self.network_alpha / average_rank
+
+        return up_hidden_states.to(orig_dtype)
+
 
 class LoRAConv2dLayer(nn.Module):
     r"""
